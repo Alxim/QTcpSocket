@@ -1,19 +1,19 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
 
-
     connectToHost();
 }
 
 void MainWindow::connectToHost()
 {
-    QString erorr;
+    QString error;
     QString host = ui->lineEdit_host->text();
 
     host = host.toLower().trimmed();
@@ -25,31 +25,31 @@ void MainWindow::connectToHost()
         host_url = QHostAddress::LocalHost;
     else
     {
-//        QStringList server_octets = Server_IP.split(".");
-//        s1 = server_octets.at (0).toLong();
-//        s2 = server_octets.at (1).toLong();
-//        s3 = server_octets.at (2).toLong();
-//        s4 = server_octets.at (3).toLong();
-//        host_url.setAddress( (s1 << 24) | (s2 << 16) | (s3 << 8) | s4 );
+        //        QStringList server_octets = Server_IP.split(".");
+        //        s1 = server_octets.at (0).toLong();
+        //        s2 = server_octets.at (1).toLong();
+        //        s3 = server_octets.at (2).toLong();
+        //        s4 = server_octets.at (3).toLong();
+        //        host_url.setAddress( (s1 << 24) | (s2 << 16) | (s3 << 8) | s4 );
     }
 
 
     if( host_url.isNull() )
     {
-         erorr = R"(Unknown hosh
+        error = R"(Unknown hosh
 host ip: :ip
 )";
 
-        erorr.replace(":ip", host_url.toString());
-        ui->textBrowser_receivedMessages->append(erorr);
+        error.replace(":ip", host_url.toString());
+        displayMessage(error);
         return;
     }
 
-//    else
-//    {
-//        QHostAddress()
-//        host_url.setScopeId(host);
-//    }
+    //    else
+    //    {
+    //        QHostAddress()
+    //        host_url.setScopeId(host);
+    //    }
 
     quint16 port = ui->spinBox_port->value();
 
@@ -73,13 +73,13 @@ host ip: :ip
 
     if(! socket->waitForConnected())
     {
-        erorr = QString("Error connect %1:%2").arg(host_url.toString()).arg(port) +
+        error = QString("Error connect %1:%2").arg(host_url.toString()).arg(port) +
                 QString("The following error occurred: %1.").arg(socket->errorString());
-        ui->textBrowser_receivedMessages->append(erorr);
+        displayMessage(error);
         return;
     }
 
-    ui->textBrowser_receivedMessages->append(QString("Connect %1:%2").arg(host_url.toString()).arg(port));
+    displayMessage(QString("Connect %1:%2").arg(host_url.toString()).arg(port));
     ui->statusBar->showMessage("Connected to Server");
 }
 
@@ -149,47 +149,50 @@ void MainWindow::discardSocket()
 void MainWindow::displayError(QAbstractSocket::SocketError socketError)
 {
     switch (socketError) {
-        case QAbstractSocket::RemoteHostClosedError:
+    case QAbstractSocket::RemoteHostClosedError:
         break;
-        case QAbstractSocket::HostNotFoundError:
-            QMessageBox::information(this, "QTCPClient", "The host was not found. Please check the host name and port settings.");
+    case QAbstractSocket::HostNotFoundError:
+        QMessageBox::information(this, "QTCPClient", "The host was not found. Please check the host name and port settings.");
         break;
-        case QAbstractSocket::ConnectionRefusedError:
-            QMessageBox::information(this, "QTCPClient", "The connection was refused by the peer. Make sure QTCPServer is running, and check that the host name and port settings are correct.");
+    case QAbstractSocket::ConnectionRefusedError:
+        QMessageBox::information(this, "QTCPClient", "The connection was refused by the peer. Make sure QTCPServer is running, and check that the host name and port settings are correct.");
         break;
-        default:
-            QMessageBox::information(this, "QTCPClient", QString("The following error occurred: %1.").arg(socket->errorString()));
+    default:
+        QMessageBox::information(this, "QTCPClient", QString("The following error occurred: %1.").arg(socket->errorString()));
         break;
     }
 }
 
 void MainWindow::on_pushButton_sendMessage_clicked()
 {
-    if(socket)
+    if( ! socket)
     {
-        if(socket->isOpen())
-        {
-            QString str = ui->lineEdit_message->text();
-
-            QDataStream socketStream(socket);
-            socketStream.setVersion(QDataStream::Qt_5_15);
-
-            QByteArray header;
-            header.prepend(QString("fileType:message,fileName:null,fileSize:%1;").arg(str.size()).toUtf8());
-            header.resize(128);
-
-            QByteArray byteArray = str.toUtf8();
-            byteArray.prepend(header);
-
-            socketStream << byteArray;
-
-            ui->lineEdit_message->clear();
-        }
-        else
-            QMessageBox::critical(this,"QTCPClient","Socket doesn't seem to be opened");
-    }
-    else
         QMessageBox::critical(this,"QTCPClient","Not connected");
+        return;
+    }
+
+    if(! socket->isOpen())
+    {
+        QMessageBox::critical(this,"QTCPClient","Socket doesn't seem to be opened");
+        return;
+    }
+
+    QString str = ui->lineEdit_message->text();
+
+    QDataStream socketStream(socket);
+    socketStream.setVersion(QDataStream::Qt_5_15);
+
+    QByteArray header;
+    header.prepend(QString("fileType:message,fileName:null,fileSize:%1;").arg(str.size()).toUtf8());
+    header.resize(128);
+
+    QByteArray byteArray = str.toUtf8();
+    byteArray.prepend(header);
+
+    socketStream << byteArray;
+
+    displayMessage("Send message: " + str);
+    ui->lineEdit_message->clear();
 }
 
 void MainWindow::on_pushButton_sendAttachment_clicked()
@@ -235,7 +238,7 @@ void MainWindow::on_pushButton_sendAttachment_clicked()
 
 void MainWindow::displayMessage(const QString& str)
 {
-    ui->textBrowser_receivedMessages->append(str);
+    ui->textBrowser_receivedMessages->append(QTime::currentTime().toString("hh:mm:ss  ") + str);
 }
 
 void MainWindow::on_pushButton_connectToHost_clicked()

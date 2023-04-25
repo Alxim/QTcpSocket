@@ -12,6 +12,8 @@
 #include <QString>
 #include <QStandardPaths>
 #include <QTcpSocket>
+#include <QTime>
+
 
 namespace Ui {
 class MainWindow;
