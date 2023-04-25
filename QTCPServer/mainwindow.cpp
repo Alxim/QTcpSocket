@@ -4,23 +4,45 @@
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    startListen();
+}
+
+void MainWindow::startListen()
+{
+    clearServer();
+
     m_server = new QTcpServer();
 
-    if(m_server->listen(QHostAddress::Any, 8080))
+    int port = ui->port->value();
+
+    if( ! m_server->listen(QHostAddress::Any, port))
     {
-       connect(this, &MainWindow::newMessage, this, &MainWindow::displayMessage);
-       connect(m_server, &QTcpServer::newConnection, this, &MainWindow::newConnection);
-       ui->statusBar->showMessage("Server is listening...");
+        QMessageBox::critical(this,"QTCPServer",
+                              QString("Unable to start the server: %1.").arg(m_server->errorString()));
+        return;
     }
-    else
-    {
-        QMessageBox::critical(this,"QTCPServer",QString("Unable to start the server: %1.").arg(m_server->errorString()));
-        exit(EXIT_FAILURE);
-    }
+
+    connect(this, &MainWindow::newMessage, this, &MainWindow::displayMessage);
+    connect(m_server, &QTcpServer::newConnection, this, &MainWindow::newConnection);
+
+    QString mess = QString("Server is listening Anu to port: %1").arg(port);
+    ui->statusBar->showMessage(mess);
+    ui->textBrowser_receivedMessages->append(mess);
 }
 
 MainWindow::~MainWindow()
 {
+    clearServer();
+    delete ui;
+}
+
+
+void MainWindow::clearServer()
+{
+    if(m_server == nullptr)
+        return;
+
     foreach (QTcpSocket* socket, connection_set)
     {
         socket->close();
@@ -28,9 +50,7 @@ MainWindow::~MainWindow()
     }
 
     m_server->close();
-    m_server->deleteLater();
-
-    delete ui;
+    delete m_server;
 }
 
 void MainWindow::newConnection()
@@ -73,27 +93,42 @@ void MainWindow::readSocket()
 
     buffer = buffer.mid(128);
 
-    if(fileType=="attachment"){
+    if(fileType=="attachment")
+    {
         QString fileName = header.split(",")[1].split(":")[1];
         QString ext = fileName.split(".")[1];
         QString size = header.split(",")[2].split(":")[1].split(";")[0];
 
-        if (QMessageBox::Yes == QMessageBox::question(this, "QTCPServer", QString("You are receiving an attachment from sd:%1 of size: %2 bytes, called %3. Do you want to accept it?").arg(socket->socketDescriptor()).arg(size).arg(fileName)))
+        if (QMessageBox::Yes !=
+                QMessageBox::question(this, "QTCPServer",
+                                      QString("You are receiving an attachment from sd:%1 of size: %2 bytes, called %3. Do you want to accept it?")
+                                      .arg(socket->socketDescriptor()).arg(size).arg(fileName)))
         {
-            QString filePath = QFileDialog::getSaveFileName(this, tr("Save File"), QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)+"/"+fileName, QString("File (*.%1)").arg(ext));
-
-            QFile file(filePath);
-            if(file.open(QIODevice::WriteOnly)){
-                file.write(buffer);
-                QString message = QString("INFO :: Attachment from sd:%1 successfully stored on disk under the path %2").arg(socket->socketDescriptor()).arg(QString(filePath));
-                emit newMessage(message);
-            }else
-                QMessageBox::critical(this,"QTCPServer", "An error occurred while trying to write the attachment.");
-        }else{
             QString message = QString("INFO :: Attachment from sd:%1 discarded").arg(socket->socketDescriptor());
             emit newMessage(message);
+            return;
         }
-    }else if(fileType=="message"){
+
+        QString filePath = QFileDialog::getSaveFileName(this, tr("Save File"),
+                                                        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)+"/"+fileName,
+                                                        QString("File (*.%1)").arg(ext));
+
+        QFile file(filePath);
+        if( ! file.open(QIODevice::WriteOnly))
+        {
+            QMessageBox::critical(this,"QTCPServer", "An error occurred while trying to write the attachment.");
+            return;
+        }
+
+        file.write(buffer);
+        QString message = QString("INFO :: Attachment from sd:%1 successfully stored on disk under the path %2")
+                .arg(socket->socketDescriptor()).arg(QString(filePath));
+        emit newMessage(message);
+
+        return;
+    }
+
+    if(fileType=="message"){
         QString message = QString("%1 :: %2").arg(socket->socketDescriptor()).arg(QString::fromStdString(buffer.toStdString()));
         emit newMessage(message);
     }
@@ -220,27 +255,29 @@ void MainWindow::sendAttachment(QTcpSocket* socket, QString filePath)
 {
     if(socket)
     {
-        if(socket->isOpen())
+        if( ! socket->isOpen())
         {
-            QFile m_file(filePath);
-            if(m_file.open(QIODevice::ReadOnly)){
+            QMessageBox::critical(this,"QTCPClient","Couldn't open the attachment!");
+            return;
+        }
 
-                QFileInfo fileInfo(m_file.fileName());
-                QString fileName(fileInfo.fileName());
+        QFile m_file(filePath);
+        if(m_file.open(QIODevice::ReadOnly)){
 
-                QDataStream socketStream(socket);
-                socketStream.setVersion(QDataStream::Qt_5_15);
+            QFileInfo fileInfo(m_file.fileName());
+            QString fileName(fileInfo.fileName());
 
-                QByteArray header;
-                header.prepend(QString("fileType:attachment,fileName:%1,fileSize:%2;").arg(fileName).arg(m_file.size()).toUtf8());
-                header.resize(128);
+            QDataStream socketStream(socket);
+            socketStream.setVersion(QDataStream::Qt_5_15);
 
-                QByteArray byteArray = m_file.readAll();
-                byteArray.prepend(header);
+            QByteArray header;
+            header.prepend(QString("fileType:attachment,fileName:%1,fileSize:%2;").arg(fileName).arg(m_file.size()).toUtf8());
+            header.resize(128);
 
-                socketStream << byteArray;
-            }else
-                QMessageBox::critical(this,"QTCPClient","Couldn't open the attachment!");
+            QByteArray byteArray = m_file.readAll();
+            byteArray.prepend(header);
+
+            socketStream << byteArray;
         }
         else
             QMessageBox::critical(this,"QTCPServer","Socket doesn't seem to be opened");
@@ -260,3 +297,9 @@ void MainWindow::refreshComboBox(){
     foreach(QTcpSocket* socket, connection_set)
         ui->comboBox_receiver->addItem(QString::number(socket->socketDescriptor()));
 }
+
+void MainWindow::on_pushButton_startListen_clicked()
+{
+    startListen();
+}
+

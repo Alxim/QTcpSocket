@@ -6,6 +6,61 @@ MainWindow::MainWindow(QWidget *parent) :
     ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+
+    connectToHost();
+}
+
+void MainWindow::connectToHost()
+{
+    QString erorr;
+    QString host = ui->lineEdit_host->text();
+
+    host = host.toLower().trimmed();
+
+    QHostAddress host_url(host);
+
+
+    if(host == "localhost")
+        host_url = QHostAddress::LocalHost;
+    else
+    {
+//        QStringList server_octets = Server_IP.split(".");
+//        s1 = server_octets.at (0).toLong();
+//        s2 = server_octets.at (1).toLong();
+//        s3 = server_octets.at (2).toLong();
+//        s4 = server_octets.at (3).toLong();
+//        host_url.setAddress( (s1 << 24) | (s2 << 16) | (s3 << 8) | s4 );
+    }
+
+
+    if( host_url.isNull() )
+    {
+         erorr = R"(Unknown hosh
+host ip: :ip
+)";
+
+        erorr.replace(":ip", host_url.toString());
+        ui->textBrowser_receivedMessages->append(erorr);
+        return;
+    }
+
+//    else
+//    {
+//        QHostAddress()
+//        host_url.setScopeId(host);
+//    }
+
+    quint16 port = ui->spinBox_port->value();
+
+    if(socket != nullptr)
+    {
+        if(socket->isOpen())
+            socket->close();
+
+        delete socket;
+    }
+
     socket = new QTcpSocket(this);
 
     connect(this, &MainWindow::newMessage, this, &MainWindow::displayMessage);
@@ -13,14 +68,19 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(socket, &QTcpSocket::disconnected, this, &MainWindow::discardSocket);
     connect(socket, &QAbstractSocket::errorOccurred, this, &MainWindow::displayError);
 
-    socket->connectToHost(QHostAddress::LocalHost,8080);
 
-    if(socket->waitForConnected())
-        ui->statusBar->showMessage("Connected to Server");
-    else{
-        QMessageBox::critical(this,"QTCPClient", QString("The following error occurred: %1.").arg(socket->errorString()));
-        exit(EXIT_FAILURE);
+    socket->connectToHost(host_url, port);
+
+    if(! socket->waitForConnected())
+    {
+        erorr = QString("Error connect %1:%2").arg(host_url.toString()).arg(port) +
+                QString("The following error occurred: %1.").arg(socket->errorString());
+        ui->textBrowser_receivedMessages->append(erorr);
+        return;
     }
+
+    ui->textBrowser_receivedMessages->append(QString("Connect %1:%2").arg(host_url.toString()).arg(port));
+    ui->statusBar->showMessage("Connected to Server");
 }
 
 MainWindow::~MainWindow()
@@ -177,3 +237,9 @@ void MainWindow::displayMessage(const QString& str)
 {
     ui->textBrowser_receivedMessages->append(str);
 }
+
+void MainWindow::on_pushButton_connectToHost_clicked()
+{
+    connectToHost();
+}
+

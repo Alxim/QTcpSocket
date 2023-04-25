@@ -42,11 +42,16 @@ private slots:
     void on_pushButton_sendAttachment_clicked();
 
     void refreshComboBox();
+    void on_pushButton_startListen_clicked();
+
 private:
     Ui::MainWindow *ui;
 
-    QTcpServer* m_server;
+    QTcpServer* m_server = nullptr;
     QSet<QTcpSocket*> connection_set;
+
+    void startListen();
+    void clearServer();
 };
 
 #endif // MAINWINDOW_H

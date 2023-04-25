@@ -34,10 +34,14 @@ private slots:
     void displayMessage(const QString& str);
     void on_pushButton_sendMessage_clicked();
     void on_pushButton_sendAttachment_clicked();
+    void on_pushButton_connectToHost_clicked();
+
 private:
     Ui::MainWindow *ui;
 
-    QTcpSocket* socket;
+    QTcpSocket* socket = nullptr;
+
+    void connectToHost();
 };
 
 #endif // MAINWINDOW_H
